@@ -1,0 +1,21 @@
+# environment files (VERY IMPORTANT)
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+
+# Build output
+dist/
+build/
+
+# OS / System
+.DS_Store
+
+# Vite config temp files
+vite.config.ts.*
+*.tar.gz
+
+# server public folder (if auto-generated)
+server/public/
