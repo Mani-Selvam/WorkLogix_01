@@ -5,6 +5,8 @@ import { WebSocketServer } from "ws";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { Pool } from "pg";
 import passport from "./passport";
 import dotenv from "dotenv";
 import cron from "node-cron";
@@ -23,20 +25,37 @@ app.use((req, res, next) => {
 });
 
 // Serve public files (including service worker) from root public directory
-app.use(express.static(path.join(import.meta.dirname, "..", "public")));
+const currentDir = typeof __dirname !== 'undefined' ? __dirname : import.meta.dirname;
+app.use(express.static(path.join(currentDir, "..", "public")));
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'worklogix-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000,
-    },
-  })
-);
+const PgSession = connectPgSimple(session);
+
+const sessionConfig: session.SessionOptions = {
+  secret: process.env.SESSION_SECRET || 'worklogix-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+};
+
+if (process.env.DATABASE_URL) {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+  sessionConfig.store = new PgSession({
+    pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+  });
+  log('Using PostgreSQL session storage');
+} else {
+  log('Warning: Using in-memory session storage (sessions will be lost on restart)');
+}
+
+app.use(session(sessionConfig));
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -155,7 +174,7 @@ async function initializeSuperAdmin() {
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route
     // doesn't interfere with the other routes
-    if (app.get("env") === "development") {
+    if (process.env.NODE_ENV === "development") {
         await setupVite(app, server);
     } else {
         serveStatic(app);
