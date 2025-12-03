@@ -14,6 +14,14 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Disable caching for Replit's iframe proxy
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 // Serve public files (including service worker) from root public directory
 app.use(express.static(path.join(import.meta.dirname, "..", "public")));
 
@@ -67,18 +75,25 @@ app.use((req, res, next) => {
 
 async function initializeSuperAdmin() {
     try {
-        const superAdminEmail = "superadmin@worklogix.com";
+        const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+        const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+        
+        if (!superAdminEmail || !superAdminPassword) {
+            log("⚠️  Super Admin not initialized: SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD environment variables must be set");
+            return;
+        }
+        
         const existingSuperAdmin = await storage.getUserByEmail(superAdminEmail);
         
         if (!existingSuperAdmin) {
-            const hashedPassword = await bcrypt.hash("worklogix@26", 10);
+            const hashedPassword = await bcrypt.hash(superAdminPassword, 10);
             await storage.createUser({
                 email: superAdminEmail,
                 displayName: "Super Admin",
                 password: hashedPassword,
                 role: "super_admin",
             });
-            log("✅ Super Admin created successfully with email: superadmin@worklogix.com");
+            log(`✅ Super Admin created successfully with email: ${superAdminEmail}`);
         } else {
             log("ℹ️  Super Admin already exists");
         }
